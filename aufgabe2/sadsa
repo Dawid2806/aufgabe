@@ -1,0 +1,170 @@
+<template>
+  <div class="card-list-container">
+    <q-table
+      ref="tableRef"
+      :columns="columnsRole"
+      :rows="roles"
+      v-model:pagination="tablePagination"
+      :rows-per-page-options="[]" row-key="name"
+      @request="onRequest"
+      :grid="$q.screen.lt.md"
+      class="page-table"
+    >
+
+      <template v-slot:body="props">
+        <q-tr :props="props">
+          <q-td key="name" :props="props">
+
+            {{ props.row.name }}
+          </q-td>
+          <q-td key="email" :props="props">
+            <q-avatar>
+              <img src="/images/user.png" alt="">
+            </q-avatar>
+            {{ props.row.email }}
+          </q-td>
+          <q-td key="role" :props="props">
+            {{ props.row.count_users }}
+          </q-td>
+          <q-td key="status" :props="props">
+            {{ props.row.status }}
+          </q-td>
+
+          <q-td>
+            <div class="button-group justify-end">
+              <q-btn icon="app:edit" @click="openEditsFormDialog(props.row)" class="secondary"/>
+              <q-btn icon="app:delete" @click="()=>{
+                selectedRow.value = props.row
+                deleteModal = true
+              }" class="secondary"/>
+            </div>
+          </q-td>
+        </q-tr>
+
+      </template>
+    </q-table>
+
+
+    <!-- Delete Dialog -->
+    <q-dialog v-model="deleteModal">
+      <q-card>
+        <q-card-section style="display: flex; justify-content: center">
+          <q-avatar style="background-color: #BEC1B7 " size="72px">
+            <q-icon name="app:delete_icon_modal"/>
+          </q-avatar>
+
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <h3>{{ t('BackendPages.projectsPage.dialogs.deleteDialog.text') }}</h3>
+          <p style="text-align: center"> {{ selectedRow.value.name }} </p>
+        </q-card-section>
+        <q-card-actions  class="buttons-container">
+          <q-btn  :label="`${t('BackendPages.projectsPage.dialogs.btnClose')}`" v-close-popup />
+          <q-btn style="background-color: var(--red-light)"  :label="`${t('BackendPages.projectsPage.dialogs.deleteDialog.btnSubmit')}`" @click="deleteItem(selectedRow.value.user_role_id)" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Editing -->
+    <q-dialog class="right-dialog" v-model="dialogEdit" :position="position">
+      <q-card>
+        <q-card-section>
+          <EditUserRoleForm :role="selectedRow" :closeDialog="closeDialog" />
+        </q-card-section>
+      </q-card>
+    </q-dialog>
+
+
+  </div>
+
+  <q-pagination v-if="pagesNumber > 1"
+                v-model="tablePagination.page"
+                :max="pagesNumber"
+                :max-pages="tablePagination.maxPages" direction-links
+                @update:model-value="triggerTableRequest"
+                style="margin-top: 2rem"/>
+
+</template>
+
+<script setup>
+
+import {useI18n} from "vue-i18n";
+import {computed, onMounted, ref} from "vue";
+import {useRouter} from "vue-router";
+import {useRoleAndPermissions}  from "stores/role-permissions-store";
+import {storeToRefs} from "pinia";
+import {useAccountsStore} from "stores/accounts-store";
+import {useGlobalStore} from "stores/global-store";
+import EditUserRoleForm from "components/backend/forms/EditUserRoleForm.vue";
+
+const globalStore = useGlobalStore()
+const roleStore = useRoleAndPermissions()
+const { roles, countAllRoles } = storeToRefs(roleStore)
+const {getRoles, deleteRole, getPermissionForNewRole} = roleStore
+const {t} = useI18n()
+const tableRef = ref()
+const router = useRouter();
+const dialogEdit = ref(false)
+const position = ref('right')
+const mailingModal = ref(false)
+const deleteModal = ref(false)
+const selectedRow = ref({})
+const searchText = ref('');
+onMounted(async () => {
+  getPermissionForNewRole()
+  triggerTableRequest()
+})
+
+
+const openEditsFormDialog = (props) => {
+  selectedRow.value = props
+  dialogEdit.value = true
+}
+const closeDialog = ()=>{
+  dialogEdit.value = false
+}
+const deleteItem = (id)=>{
+  deleteRole(id)
+  triggerTableRequest()
+}
+
+function triggerTableRequest() {
+  tableRef.value.requestServerInteraction()
+}
+
+
+const tablePagination = ref({
+  sortBy: 'name',
+  descending: globalStore.paginationOptions.descending,
+  page: 1,
+  rowsPerPage: globalStore.paginationOptions.limit,
+  rowsNumber: countAllRoles.value,
+  maxPages: globalStore.paginationOptions.maxPages,
+})
+const pagesNumber = computed(() => {
+  return Math.ceil(tablePagination.value.rowsNumber / tablePagination.value.rowsPerPage)
+})
+
+async function onRequest(prs) {
+  const {page, rowsPerPage, sortBy, descending} = prs.pagination
+
+  tablePagination.value.page = page
+  tablePagination.value.rowsPerPage = rowsPerPage
+  tablePagination.value.sortBy = sortBy
+  tablePagination.value.descending = descending
+
+  await getRoles((page - 1) * rowsPerPage, rowsPerPage, sortBy, descending, searchText.value)
+  tablePagination.value.rowsNumber = countAllRoles.value
+}
+
+
+const columnsRole = [
+  {name: 'name', label: t('BackendPages.settingsPage.tabs.userRoleTab.header.name'), field: 'name', sortable: true, align: 'left'},
+  {name: 'email', label: t('BackendPages.settingsPage.tabs.userRoleTab.header.createFrom'), field: 'email', sortable: true, align: 'left'},
+  {name: 'role', label: t('BackendPages.settingsPage.tabs.userRoleTab.header.quantity'), field: 'role', sortable: true, align: 'left'},
+  {name: 'status', label: t('BackendPages.settingsPage.tabs.userRoleTab.header.lastEdit'), field: 'status', align: 'left'},
+  {name: 'actions', label: '', field: ''},
+]
+</script>
+
